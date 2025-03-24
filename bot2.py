@@ -1,38 +1,25 @@
-from dnslib import DNSRecord, DNSHeader, RR, A
-from dnslib.server import DNSServer, BaseResolver
-import logging
+from dnslib import *
+import socketserver
 
-class RedirectResolver(BaseResolver):
-    def __init__(self, ip):
-        self.ip = ip
+FAKE_IP = "1.2.3.4"
 
-    def resolve(self, request, handler):
-        reply = request.reply()
-        qname = request.q.qname
-        reply.add_answer(RR(qname, rdata=A(self.ip), ttl=60))
-        return reply
+class DNSHandler(socketserver.BaseRequestHandler):
+    def handle(self):
+        data = self.request[0].strip()
+        dns_request = DNSRecord.parse(data)
+        qname = str(dns_request.q.qname)
 
-def main():
-    logging.basicConfig(level=logging.INFO)
+        print(f"[+] DNS Request for: {qname}")
 
-    # گرفتن آدرس IP از کاربر
-    ip_to_redirect = input("لطفاً آدرس IP سرور را وارد کنید: ")
+        reply = dns_request.reply()
+        reply.add_answer(RR(qname, QTYPE.A, rdata=A(FAKE_IP), ttl=60))
 
-    # ایجاد resolver سفارشی
-    resolver = RedirectResolver(ip_to_redirect)
-
-    # پیکربندی و شروع سرور DNS
-    server = DNSServer(resolver, port=53, address="0.0.0.0")
-    server.start_thread()
-
-    print(f"سرور DNS شروع به کار کرد و تمام درخواست‌ها را به {ip_to_redirect} هدایت می‌کند.")
-
-    try:
-        while True:
-            pass
-    except KeyboardInterrupt:
-        print("سرور DNS متوقف شد.")
-        pass
+        self.request[1].sendto(reply.pack(), self.client_address)
 
 if __name__ == "__main__":
-    main()
+    print("[+] DNS Server Running on Port 53...")
+    server = socketserver.UDPServer(("0.0.0.0", 53), DNSHandler)
+    try:
+        server.serve_forever()
+    except KeyboardInterrupt:
+        print("\n[!] Server stopped.")
